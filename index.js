@@ -13,8 +13,7 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
     cors: {
-        origin: "http://localhost:3000",
-        methods: ["GET", "POST"],
+        origin: '*'
     }
 });
 
@@ -26,6 +25,7 @@ io.on("connection", (socket) => {
             socket.leave(Array.from(socket.rooms)[1]);
         }
         socket.join(data);
+        io.to(Array.from(io.sockets.adapter.rooms.get(data))[0]).emit("boss_notified", `you are the boss of the room ${data}`);
         let rooms = getRooms(io);
         rooms.forEach(room => {
             io.in(room).emit("clients_count", io.sockets.adapter.rooms.get(room).size);
@@ -40,7 +40,8 @@ io.on("connection", (socket) => {
         let rooms = getRooms(io);
         rooms.forEach(room => {
             io.in(room).emit("clients_count", io.sockets.adapter.rooms.get(room).size);
-        })
+            io.to(Array.from(io.sockets.adapter.rooms.get(room))[0]).emit("boss_notified", `you are the boss of the room ${room}`);
+        });
     });
 })
 
