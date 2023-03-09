@@ -18,7 +18,6 @@ const io = new Server(server, {
 });
 
 io.on("connection", (socket) => {
-    console.log(`User Connected : ${socket.id}`);
 
     socket.on("join_room", (data) => {
         if(socket.rooms.size == 2) {
@@ -30,6 +29,17 @@ io.on("connection", (socket) => {
         rooms.forEach(room => {
             io.in(room).emit("clients_count", io.sockets.adapter.rooms.get(room).size);
         });
+    });
+
+    socket.on("access_page", () => {
+        let room = "";
+        console.log(socket.rooms);
+        if(socket.rooms.size == 2) {
+            room = Array.from(socket.rooms)[1];
+            io.to(room).emit("room_response", room);
+            io.to(Array.from(io.sockets.adapter.rooms.get(room))[0]).emit("boss_notified", `you are the boss of the room ${room}`);
+            io.in(room).emit("clients_count", io.sockets.adapter.rooms.get(room).size);
+        }
     });
 
     socket.on("send_message", (data) => {
