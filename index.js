@@ -24,7 +24,8 @@ io.on("connection", (socket) => {
             socket.leave(Array.from(socket.rooms)[1]);
         }
         socket.join(data);
-        io.to(Array.from(io.sockets.adapter.rooms.get(data))[0]).emit("boss_notified", `you are the boss of the room ${data}`);
+        io.to(data).emit("room_response", data);
+        io.to(getBoss(data)).emit("boss_notified", `Boss`);
         let rooms = getRooms(io);
         rooms.forEach(room => {
             io.in(room).emit("clients_count", io.sockets.adapter.rooms.get(room).size);
@@ -33,24 +34,23 @@ io.on("connection", (socket) => {
 
     socket.on("access_page", () => {
         let room = "";
-        console.log(socket.rooms);
         if(socket.rooms.size == 2) {
             room = Array.from(socket.rooms)[1];
             io.to(room).emit("room_response", room);
-            io.to(Array.from(io.sockets.adapter.rooms.get(room))[0]).emit("boss_notified", `you are the boss of the room ${room}`);
+            io.to(getBoss(room)).emit("boss_notified", `Boss`);
             io.in(room).emit("clients_count", io.sockets.adapter.rooms.get(room).size);
         }
     });
 
     socket.on("send_message", (data) => {
-        io.in(data.room).emit("receive_message", data);
+        io.in(Array.from(socket.rooms)[1]).emit("receive_message", data);
     });
 
     socket.on("disconnect", () => {
         let rooms = getRooms(io);
         rooms.forEach(room => {
             io.in(room).emit("clients_count", io.sockets.adapter.rooms.get(room).size);
-            io.to(Array.from(io.sockets.adapter.rooms.get(room))[0]).emit("boss_notified", `you are the boss of the room ${room}`);
+            io.to(getBoss(room)).emit("boss_notified", `Boss`);
         });
     });
 })
@@ -68,4 +68,8 @@ function getRooms(io) {
         }
     }
     return rooms;
+}
+
+function getBoss(room) {
+    return Array.from(io.sockets.adapter.rooms.get(room))[0];
 }
