@@ -4,6 +4,7 @@ const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
 const { connect } = require("http2");
+const fetch = require("node-fetch");
 
 app.use(cors());
 
