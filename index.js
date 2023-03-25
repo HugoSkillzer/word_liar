@@ -52,6 +52,10 @@ io.on("connection", (socket) => {
                 io.in(room).emit("clients_count", io.sockets.adapter.rooms.get(room).size);
             });
         }
+        let playersNumber = io.sockets.adapter.rooms.get(data.room).size;
+        if(playersNumber == 3) {
+            io.to(getBoss(data.room)).emit('can_play');
+        }
     });
 
     socket.on("access_page", () => {
@@ -70,13 +74,23 @@ io.on("connection", (socket) => {
     });
 
     socket.on("launch_game", () => {
+        console.log("map_games: ");
+        console.log(mapGamesResume);
+        console.log("map_games_words_to_play: ");
+        console.log(mapGamesWordsToPlay);
+        console.log("map_pseudo_users: ");
+        console.log(mapPseudosUsers);
+        console.log("map_user_pseudos: ");
+        console.log(mapUsersPseudos);
+        console.log("map_user_resume_words: ");
+        console.log(mapUsersResumeWords);
+        console.log("map_user_words_received: ");
+        console.log(mapUsersWordsReceived);
+        console.log("map_games_launched: ");
+        console.log(mapGamesLaunched);
         let room = Array.from(socket.rooms)[1];
         let players = io.sockets.adapter.rooms.get(room);
         let playersNumber = players.size
-        /*const mapUsersInGame = new Map();
-        Array.from(players).forEach(player => {
-            mapUsersInGame.set(player, mapUsersPseudos.get(player));
-        });*/
         mapGamesLaunched.set(room, true);
         mapGamesResume.set(room, new Map());
         io.in(room).emit("game_launched");
@@ -141,92 +155,108 @@ io.on("connection", (socket) => {
     socket.on('play_next_round', () => {
         let room = Array.from(socket.rooms)[1];
         let wordsToPlay = mapGamesWordsToPlay.get(room);
-        wordsToPlay.sort(() => (Math.random() > .5) ? 1 : -1);
         let players = Array.from(io.sockets.adapter.rooms.get(room));
         let roundNumber = players.length * 3 - wordsToPlay.length + 1;
-        io.in(room).emit('round_number', roundNumber);
-        let mapRoundInfo = new Map();
-        let mapRounds = mapGamesResume.get(room);
-        let mapPoints = new Map();
-        let mapGlobalPoints = new Map();
-        let mapTraitorVotes = new Map();
-        let mapInnocentVotes = new Map();
-        if(!mapRounds) {
-            mapRounds = new Map();
-        }
-        players.forEach(player => {
-            mapPoints.set(mapUsersPseudos.get(player), 0);
-            mapGlobalPoints.set(mapUsersPseudos.get(player), 0);
-        });
-        mapRoundInfo.set("traitorVotes", mapTraitorVotes);
-        mapRoundInfo.set("innocentVotes", mapInnocentVotes);
-        mapRoundInfo.set("points", mapPoints);
-        mapRoundInfo.set("word", wordsToPlay[0]);
-        mapRounds.set(roundNumber, mapRoundInfo);
-        if(roundNumber == 1) {
-            mapRounds.set("globalPoints", mapGlobalPoints);
-        }
-        mapGamesResume.set(room, mapRounds);
-        players.forEach(playerToContact => {
-            io.to(playerToContact).emit("word_to_guess", wordsToPlay[0]);
-            io.to(playerToContact).emit('traitor', false);
-            if(playerToContact != mapUsersWordsReceived.get(wordsToPlay[0])) {
-                let otherPlayers = [];
-                players.forEach(player => {
-                    if(player != playerToContact) {
-                        otherPlayers.push(mapUsersPseudos.get(player));
-                    }
-                io.to(playerToContact).emit('other_players', otherPlayers);
-                });
-            } else {
-                io.to(playerToContact).emit('other_players', []);
-                io.to(playerToContact).emit('traitor', true);
+        if(roundNumber < players.length * 3 + 1) {
+            wordsToPlay.sort(() => (Math.random() > .5) ? 1 : -1);
+            if(roundNumber == players.length * 3) {
+                io.in(room).emit('round_number', "end");
             }
-        });
-        wordsToPlay.splice(0,1);
+            io.in(room).emit('round_number', roundNumber);
+            let mapRoundInfo = new Map();
+            let mapRounds = mapGamesResume.get(room);
+            let mapPoints = new Map();
+            let mapGlobalPoints = new Map();
+            let mapTraitorVotes = new Map();
+            let mapInnocentVotes = new Map();
+            if(!mapRounds) {
+                mapRounds = new Map();
+            }
+            players.forEach(player => {
+                mapPoints.set(mapUsersPseudos.get(player), 0);
+                mapGlobalPoints.set(mapUsersPseudos.get(player), 0);
+            });
+            mapRoundInfo.set("traitorVotes", mapTraitorVotes);
+            mapRoundInfo.set("innocentVotes", mapInnocentVotes);
+            mapRoundInfo.set("points", mapPoints);
+            mapRoundInfo.set("word", wordsToPlay[0]);
+            mapRounds.set(roundNumber, mapRoundInfo);
+            if(roundNumber == 1) {
+                mapRounds.set("globalPoints", mapGlobalPoints);
+            }
+            mapGamesResume.set(room, mapRounds);
+            players.forEach(playerToContact => {
+                io.to(playerToContact).emit("word_to_guess", wordsToPlay[0]);
+                io.to(playerToContact).emit('traitor', false);
+                if(playerToContact != mapUsersWordsReceived.get(wordsToPlay[0])) {
+                    let otherPlayers = [];
+                    players.forEach(player => {
+                        if(player != playerToContact) {
+                            otherPlayers.push(mapUsersPseudos.get(player));
+                        }
+                    if(players.length == 3) {
+                        io.to(playerToContact).emit('no_innocent_vote');
+                    }
+                    io.to(playerToContact).emit('other_players', otherPlayers);
+                    });
+                } else {
+                    io.to(playerToContact).emit('other_players', []);
+                    io.to(playerToContact).emit('traitor', true);
+                }
+            });
+            wordsToPlay.splice(0,1);
+        }
     });
 
     //data => roundNumber, traitor, innocent, word + socketId
     socket.on("vote", (data) => {
         let room = Array.from(socket.rooms)[1];
-        let playersNumber = io.sockets.adapter.rooms.get(room).size;
-        let mapRounds = mapGamesResume.get(room);
-        let mapRoundInfo = mapRounds.get(data.roundNumber);
-        let mapTraitorVotes = mapRoundInfo.get("traitorVotes");
-        let mapInnocentVotes = mapRoundInfo.get("innocentVotes");
-        let mapPoints = mapRoundInfo.get("points");
-        mapTraitorVotes.set(mapUsersPseudos.get(socket.id), data.traitor);
-        mapInnocentVotes.set(mapUsersPseudos.get(socket.id), data.innocent);
-        if(mapUsersWordsReceived.get(data.wordToGuess) != mapPseudosUsers.get(data.traitor)) {
-            let points = mapPoints.get(data.traitor);
-            points++;
-            mapPoints.set(data.traitor, points);
-            points = mapPoints.get(mapUsersPseudos.get(mapUsersWordsReceived.get(data.wordToGuess)));
-            points++;
-            mapPoints.set(mapUsersPseudos.get(mapUsersWordsReceived.get(data.wordToGuess)), points);
-        } else {
-            let points = mapPoints.get(mapUsersPseudos.get(socket.id));
-            points++;
-            mapPoints.set(mapUsersPseudos.get(socket.id), points);
-        }
-        if(mapInnocentVotes.size === playersNumber-1 && mapTraitorVotes.size === playersNumber-1) {
-            let numberOfVotesAgainstTraitor = 0;
-            for (let vote of mapInnocentVotes.values()){
-                if(mapUsersWordsReceived.get(data.wordToGuess) === mapPseudosUsers.get(vote)) {
-                    numberOfVotesAgainstTraitor++;
-                }
+        if(room) {
+            let playersNumber = io.sockets.adapter.rooms.get(room).size;
+            let mapRounds = mapGamesResume.get(room);
+            let mapRoundInfo = mapRounds.get(data.roundNumber);
+            let mapTraitorVotes = mapRoundInfo.get("traitorVotes");
+            let mapInnocentVotes = new Map();
+            mapTraitorVotes.set(mapUsersPseudos.get(socket.id), data.traitor);
+            if(playersNumber > 3) {
+                mapInnocentVotes = mapRoundInfo.get("innocentVotes");
+                mapInnocentVotes.set(mapUsersPseudos.get(socket.id), data.innocent);
             }
-            if(numberOfVotesAgainstTraitor >= Math.ceil((playersNumber-1) / 2)) {
+            let mapPoints = mapRoundInfo.get("points");
+            if(mapUsersWordsReceived.get(data.wordToGuess) != mapPseudosUsers.get(data.traitor)) {
+                let points = mapPoints.get(data.traitor);
+                points++;
+                mapPoints.set(data.traitor, points);
                 points = mapPoints.get(mapUsersPseudos.get(mapUsersWordsReceived.get(data.wordToGuess)));
-                points = 0;
+                points++;
                 mapPoints.set(mapUsersPseudos.get(mapUsersWordsReceived.get(data.wordToGuess)), points);
+            } else {
+                let points = mapPoints.get(mapUsersPseudos.get(socket.id));
+                points++;
+                mapPoints.set(mapUsersPseudos.get(socket.id), points);
             }
-            let mapGlobalPoints = mapRounds.get('globalPoints');
-            for (let player of mapGlobalPoints.keys()) {
-                let points = mapGlobalPoints.get(player);
-                let pointsToAdd = mapPoints.get(player);
-                let pointsResult = points+pointsToAdd;
-                mapGlobalPoints.set(player, pointsResult);
+            if(mapTraitorVotes.size === playersNumber-1) {
+                if(playersNumber > 3) {
+                    let numberOfVotesAgainstTraitor = 0;
+                    for (let vote of mapInnocentVotes.values()){
+                        if(mapUsersWordsReceived.get(data.wordToGuess) === mapPseudosUsers.get(vote)) {
+                            numberOfVotesAgainstTraitor++;
+                        }
+                    }
+                    if(numberOfVotesAgainstTraitor >= Math.ceil((playersNumber-1) / 2)) {
+                        points = mapPoints.get(mapUsersPseudos.get(mapUsersWordsReceived.get(data.wordToGuess)));
+                        points = 0;
+                        mapPoints.set(mapUsersPseudos.get(mapUsersWordsReceived.get(data.wordToGuess)), points);
+                    }
+                }
+                let mapGlobalPoints = mapRounds.get('globalPoints');
+                for (let player of mapGlobalPoints.keys()) {
+                    let points = mapGlobalPoints.get(player);
+                    let pointsToAdd = mapPoints.get(player);
+                    let pointsResult = points+pointsToAdd;
+                    mapGlobalPoints.set(player, pointsResult);
+                }
+            io.to(getBoss(room)).emit("vote_complete");
             }
         }
     });
@@ -234,6 +264,7 @@ io.on("connection", (socket) => {
     socket.on("disconnect_from_game", () => {
         let room = Array.from(socket.rooms)[1];
         if(room) {
+            mapPseudosUsers.delete(mapUsersPseudos.get(socket.id));
             mapUsersPseudos.delete(socket.id);
             mapUsersResumeWords.delete(socket.id);
             socket.leave(room);
@@ -241,16 +272,37 @@ io.on("connection", (socket) => {
             if(rooms.length == 0) {
                 mapGamesLaunched.clear();
             }
-            if(io.sockets.adapter.rooms.get(room)) {
+            if(io.sockets.adapter.rooms.get(room)?.size > 2) {
                 io.in(room).emit("clients_count", io.sockets.adapter.rooms.get(room).size);
                 io.to(getBoss(room)).emit("boss_notified", `Boss`);
+                let wordsToPlay = mapGamesWordsToPlay.get(room);
+                let wordsToKeep = [];
+                wordsToPlay.forEach(word => {
+                    if(mapUsersWordsReceived.get(word) === socket.id) {
+                        mapUsersWordsReceived.delete(word);
+                    } else {
+                        wordsToKeep.push(word);
+                    }
+                });
+                mapGamesWordsToPlay.set(room, wordsToKeep);
             } else {
                 mapGamesLaunched.delete(room);
+                mapGamesResume.delete(room);
+                let wordsToPlay = mapGamesWordsToPlay.get(room);
+                wordsToPlay.forEach(word => {
+                    mapUsersWordsReceived.delete(word);
+                    });
+                if(!io.sockets.adapter.rooms.get(room)) {
+                    console.log("pompier");
+                    mapGamesWordsToPlay.delete(room);
+                }
+                io.in(room).emit("no_enough_player");
             }
         }
     });
 
     socket.on("disconnect", () => {
+        mapPseudosUsers.delete(mapUsersPseudos.get(socket.id));
         mapUsersPseudos.delete(socket.id);
         mapUsersResumeWords.delete(socket.id);
         let rooms = getRooms(io);
@@ -258,12 +310,30 @@ io.on("connection", (socket) => {
             mapGamesLaunched.clear();
         }
         rooms.forEach(room => {
-            io.in(room).emit("clients_count", io.sockets.adapter.rooms.get(room).size);
-            io.to(getBoss(room)).emit("boss_notified", `Boss`);
-            for (let key of mapGamesLaunched.keys()) {
-                if(!rooms.includes(key)) {
-                    mapGamesLaunched.delete(key);
+            if(io.sockets.adapter.rooms.get(room).size > 2) {
+                io.in(room).emit("clients_count", io.sockets.adapter.rooms.get(room).size);
+                io.to(getBoss(room)).emit("boss_notified", `Boss`);
+                let wordsToPlay = mapGamesWordsToPlay.get(room);
+                let wordsToKeep = [];
+                wordsToPlay?.forEach(word => {
+                    if(mapUsersWordsReceived.get(word) === socket.id) {
+                        mapUsersWordsReceived.delete(word);
+                    } else {
+                        wordsToKeep.push(word);
+                    }
+                });
+                mapGamesWordsToPlay.set(room, wordsToKeep);
+            } else {
+                mapGamesLaunched.delete(room);
+                mapGamesResume.delete(room);
+                let wordsToPlay = mapGamesWordsToPlay.get(room);
+                wordsToPlay?.forEach(word => {
+                    mapUsersWordsReceived.delete(word);
+                    });
+                if(!io.sockets.adapter.rooms.get(room)) {
+                    mapGamesWordsToPlay.delete(room);
                 }
+                io.in(room).emit("no_enough_player");
             }
         });
     });
