@@ -74,20 +74,6 @@ io.on("connection", (socket) => {
     });
 
     socket.on("launch_game", () => {
-        console.log("map_games: ");
-        console.log(mapGamesResume);
-        console.log("map_games_words_to_play: ");
-        console.log(mapGamesWordsToPlay);
-        console.log("map_pseudo_users: ");
-        console.log(mapPseudosUsers);
-        console.log("map_user_pseudos: ");
-        console.log(mapUsersPseudos);
-        console.log("map_user_resume_words: ");
-        console.log(mapUsersResumeWords);
-        console.log("map_user_words_received: ");
-        console.log(mapUsersWordsReceived);
-        console.log("map_games_launched: ");
-        console.log(mapGamesLaunched);
         let room = Array.from(socket.rooms)[1];
         let players = io.sockets.adapter.rooms.get(room);
         let playersNumber = players.size
@@ -261,6 +247,29 @@ io.on("connection", (socket) => {
         }
     });
 
+    //data => roundNumber, traitor, innocent, word + socketId
+    socket.on("show_results", (data) => {
+        let room = Array.from(socket.rooms)[1];
+        io.to(room).emit("go_to_results");
+    });
+
+    //data => roundNumber, traitor, innocent, word + socketId
+    socket.on("ask_results", (data) => {
+        let room = Array.from(socket.rooms)[1];
+        if(room) {
+            let mapRounds = mapGamesResume.get(room);
+            let mapGlobalPoints = mapRounds.get('globalPoints');
+            const mapSortPoints = new Map([...mapGlobalPoints.entries()].sort((a, b) => b[1] - a[1]));
+            const json = JSON.stringify(Object.fromEntries(mapSortPoints));
+            io.to(socket.id).emit("ranking", json);
+            if(mapSortPoints.keys().next().value === mapUsersPseudos.get(socket.id)) {
+                io.to(socket.id).emit("victory")
+            } else {
+                io.to(socket.id).emit("defeat")
+            }
+        }
+    });
+
     socket.on("disconnect_from_game", () => {
         let room = Array.from(socket.rooms)[1];
         if(room) {
@@ -293,7 +302,6 @@ io.on("connection", (socket) => {
                     mapUsersWordsReceived.delete(word);
                     });
                 if(!io.sockets.adapter.rooms.get(room)) {
-                    console.log("pompier");
                     mapGamesWordsToPlay.delete(room);
                 }
                 io.in(room).emit("no_enough_player");
